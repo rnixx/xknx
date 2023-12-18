@@ -8,17 +8,141 @@ nav_order: 2
 
 # Unreleased changes
 
-### Data Secure
+### Secure
 
-- Support KNX Data Secure for group communication. Keys are read from an ETS keyring export.
+- Parse `project_name` from an ETS Keyring.
+
+### Internal
+
+- Use ruff isort plugin, remove isort from requirements.
+
+# 2.11.2 DPT 9 small negative fix 2023-07-24
+
+### Bugfixes
+
+- Fix DPT 9 handling of values < `0` and >= `-0.005`. These are now rounded to `0` instead of being sent as `-20.48`.
+
+# 2.11.1 DateTime fix 2023-06-26
+
+### Bugfixes
+
+- Fix processing custom time data in DateTime devices.
+
+# 2.11.0 DateTime state 2023-06-25
+
+### Devices
+
+- Add group_address_state, respond_to_read and sync_state arguments to DateTime devices.
+- Add DPT 9 support for Light color temperature.
 
 ### Internals
 
+- Remove pydocstyle and flake8 plugins, add pytest-icdiff to testing requirements.
+
+# 2.10.0 Tunnelling Feature 2023-05-08
+
+### Protocol
+
+- Support Tunnelling Feature service messages.
+
+# 2.9.0 Spring cleanup 2023-04-22
+
+### Dependencies
+
+- For Python <3.11 dependency `async_timeout` is added as backport for `asyncio.timeout`.
+
+### Internals
+
+- Replace `asyncio.wait_for` with `asyncio.timeout`.
+- Add Ruff to pre-commit and tox.
+- Use pyproject.toml for specifying project metadata.
+
+# 2.8.0 Hostnames 2023-04-12
+
+### Connection
+
+- Resolve IP addresses from hostname or adapter name for `gateway_ip` or `local_ip`.
+
+### Bugfixes
+
+- Handle empty list for group addresses in RemoteValue.
+
+### Internals
+
+- Refactor DPTBase transcoder classes
+  - Accept `DPTArray` or `DPTBinary` in `DPTBase.from_knx()` instead of raw `tuple[int]`.
+  - Return `DPTArray` or `DPTBinary` from `DPTBase.to_knx()` instead of `tuple[int, ...]`.
+  - Remove payload_valid() from RemoteValue and remove payload type form its generics parameters.
+
+# 2.7.0 IP Device Management 2023-03-15
+
+### Protocol
+
+- Add support for Device Management Configuration service.
+- Support CEMI M_Prop messages.
+- Don't ignore CEMIFrames with source address equal to `xknx.current_address`.
+
+### Internals
+
+- Use CEMILData instead of CEMIFrame in DataSecure.
+- Move `init_from_telegram()` from CEMIFrame to CEMILData. `telegram()` is now a method of CEMILData instead of a property of CEMIFrame.
+
+# 2.6.0 Connection information 2023-02-27
+
+### Connection
+
+- When `ConnectionConfig.individual_address` is set and a Keyring is given `ConnectionType.AUTOMATIC` will try to connect to the host of this address. If not found (in keyfile or discovery) it will raise.
+- Add CEMIFrame counters connection type and timestamp of connection start.
+
+### Internals
+
+- Lower log levels for unsupported Telegrams and add more information.
+- Move CEMIFrame parsing from Interface to CEMIHandler.
+
+# 2.5.0 Request IA 2023-02-14
+
+### Connection
+
+- Use only Interfaces listed in Keyring when `ConnectionType.AUTOMATIC` is used and a Keyring is configured.
+- Request specific tunnel by individual address for TCP connections when `ConnectionConfig.individual_address` is set.
+
+### Bugfixes
+
+- Parse Data Secure credentials form Keyring from non-IP-Secure interfaces.
+- Parse Data Secure credentials from Keyrings exported for specific interfaces.
+- Fix callback for Cover target position when called with same value consecutively.
+- Fix Windows TCP transport bug when using IP Secure Tunnelling.
+- Don't create unreferenced asyncio Tasks. `xknx.task_registry.background()` can now be used to create background tasks.
+
+### Protocol
+
+- Support Extended Connection Request Information (CRI) for requesting a specific individual address on Tunnelling v2.
+- Add Core v2 Error Code definitions.
+
+### Cleanups
+
+- Accept `str | os.PathLike` for Keyring path. Previously only `str`.
+- Rename `_load_keyring` to `sync_load_keyring` to make it public e.g. when it should be used from an executor.
+- Update CI. Use `codespell` and `flake8-print`.
+
+# 2.4.0 Data Secure 2023-02-05
+
+### Data Secure
+
+- Support KNX Data Secure for group communication. Keys are sourced from an ETS keyring file.
+
+### Bugfixes
+
+- Fix wrong string length in keyfile signature verification for multi-byte UTF-8 encoded attribute values.
+
+### Internals
+
+- `destination_address` in `Telegram` init is no longer optional.
+- `timestamp` attribute in `Telegram` is removed.
+- Rename `xknx.secure.ip_secure` to `xknx.secure.security_primitives`.
 - Return `bytes` from `BaseAddress.to_knx()` instead of `tuple[int, int]`. This is used in `IndividualAddress` and `GroupAddress`.
 - Add `BaseAddress.from_knx()` to instantiate from `bytes`, remove instantiation form `tuple[int, int]`.
 - Refactor APCI to return complete Subclass `APCI.from_knx()` and removed `APCI.resolve_apci()`.
-- Rename `xknx.secure.ip_secure` to `xknx.secure.security_primitives`.
-- Fix wrong string length in keyfile signature verification for multi-byte UTF-8 encoded attribute values.
 
 # 2.3.0 Routing security, DPTs and CEMI-Refactoring 2023-01-10
 
@@ -108,7 +232,7 @@ nav_order: 2
 
 ### Management
 
-- Fix APCI service parsing for 10bit control fileds.
+- Fix APCI service parsing for 10bit control fields.
 - Set reasonable default count values for APCI classes.
 - Set xknx.current_address for routing connections so management frames received over Routing are handled properly.
 - Fix wrong length of AuthorizeRequest.
@@ -693,7 +817,7 @@ nav_order: 2
 
 - HA Switch entity: keep state without state_address
 - Cover: fix `set_position` without writable position / auto_stop_if_necessary
-- handle unsupported CEMI Messages without loosing tunnel connection
+- handle unsupported CEMI Messages without losing tunnel connection
 
 ## 0.15.2 Winter is coming
 
@@ -806,7 +930,7 @@ nav_order: 2
 
 - Climate: `setpoint_shift_step` renamed for `temperature_step`. This attribute can be applied to all temperature modes. Default is `0.1`
 - Removed significant_bit attribute in BinarySensor
-- DateTime devices are initialized with sting for broadcast_type: "time", "date" or "datetime" instead of an Enum value
+- DateTime devices are initialized with string for broadcast_type: "time", "date" or "datetime" instead of an Enum value
 - Removed `bind_to_multicast` option in ConnectionConfig and UDPClient
 
 ### New Features
@@ -848,7 +972,7 @@ nav_order: 2
 
 ### New Features
 
-- added a lot of DPTs now useable as sensor type (@eXtenZy #255)
+- added a lot of DPTs now usable as sensor type (@eXtenZy #255)
 
 ### Bugfixes
 
@@ -937,13 +1061,13 @@ nav_order: 2
 ## 0.9.2 - Release 2018-12-22
 
 - Min and max values for Climate device
-- Splitted up Climate in Climate and ClimateMode
+- split up Climate in Climate and ClimateMode
 - added **contains** method for Devices class.
 - fixed KeyError when action refers to a non existing device.
 
 ## 0.9.1 - Release 2018-10-28
 
-- state_addresses of binary_sesor should return emty value if no
+- state_addresses of binary_sesor should return empty value if no
   state address is set.
 - state_address for notification device
 
@@ -979,7 +1103,7 @@ nav_order: 2
 
 - Color support for HASS plugin
 - Bugfixes (esp problem with unhashable exceptions)
-- Refactoring: splitted up remote_value.py
+- Refactoring: split up remote_value.py
 - Better test coverage
 
 ## 0.8.1 - Release 2018-02-03
@@ -990,7 +1114,7 @@ nav_order: 2
 ## 0.8.0 - Release 2018-01-27
 
 - New example for MQTT forwarder (thanks @JohanElmis)
-- Splitted up Address into GroupAddress and PhysicalAddress (thanks @encbladexp)
+- split up Address into GroupAddress and PhysicalAddress (thanks @encbladexp)
 - Time object was renamed to Datetime and does now support different broadcast types "time", "date" and "datetime" (thanks @Roemer)
 - Many new DTP datapoints esp for physical values (thanks @Straeng and @JohanElmis)
 - new asyncio `await` syntax
@@ -1031,7 +1155,7 @@ The naming of some device were changed in order to get the nomenclature closer t
 
 #### Climate
 
-Renamed class `Thermostat` to `Climate` . Plase rename the section within configuration:
+Renamed class `Thermostat` to `Climate` . Please rename the section within configuration:
 
 ```yaml
 groups:
@@ -1041,7 +1165,7 @@ groups:
 
 #### Cover
 
-Renamed class `Shutter` to `Cover`. Plase rename the section within configuration:
+Renamed class `Shutter` to `Cover`. Please rename the section within configuration:
 
 ```yaml
 groups:
@@ -1059,7 +1183,7 @@ groups:
 
 #### Binary Sensor
 
-Renamed class `Switch` to `BinarySensor`. Plase rename the section within configuration:
+Renamed class `Switch` to `BinarySensor`. Please rename the section within configuration:
 
 ```yaml
 groups:

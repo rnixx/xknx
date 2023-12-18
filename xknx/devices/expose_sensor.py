@@ -7,7 +7,7 @@ It provides functionality for
 * KNX devices may read local values via GROUP READ.
 
 (A typical example for using this class is the outside temperature
-read from e.g. an internet serviceand exposed to ths KNX bus.
+read from e.g. an internet serviceand exposed to the KNX bus.
 KNX devices may show this value within their display.)
 """
 from __future__ import annotations
@@ -75,7 +75,7 @@ class ExposeSensor(Device):
         self._cooldown_latest_value = self.sensor_value.value
         await super().after_update()
 
-    def _iter_remote_values(self) -> Iterator[RemoteValue[Any, Any]]:
+    def _iter_remote_values(self) -> Iterator[RemoteValue[Any]]:
         """Iterate the devices RemoteValue classes."""
         yield self.sensor_value
 
@@ -129,6 +129,6 @@ class ExposeSensor(Device):
         return (
             f'<ExposeSensor name="{self.name}" '
             f"sensor={self.sensor_value.group_addr_str()} "
-            f"value={repr(self.sensor_value.value)} "
+            f"value={self.sensor_value.value!r} "
             f'unit="{self.unit_of_measurement()}"/>'
         )

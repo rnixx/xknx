@@ -4,6 +4,7 @@ from __future__ import annotations
 from xknx.exceptions import ConversionError
 
 from .dpt import DPTNumeric
+from .payload import DPTArray, DPTBinary
 
 
 class DPTSignedRelativeValue(DPTNumeric):
@@ -23,15 +24,15 @@ class DPTSignedRelativeValue(DPTNumeric):
     resolution = 1
 
     @classmethod
-    def from_knx(cls, raw: tuple[int, ...]) -> int:
+    def from_knx(cls, payload: DPTArray | DPTBinary) -> int:
         """Parse/deserialize from KNX/IP raw data."""
-        cls.test_bytesarray(raw)
+        raw = cls.validate_payload(payload)
         if raw[0] > cls.value_max:
             return raw[0] - 0x100
         return raw[0]
 
     @classmethod
-    def to_knx(cls, value: int | float) -> tuple[int]:
+    def to_knx(cls, value: int | float) -> DPTArray:
         """Serialize to KNX/IP raw data."""
         try:
             knx_value = int(value)
@@ -39,7 +40,7 @@ class DPTSignedRelativeValue(DPTNumeric):
                 raise ValueError
             if knx_value < 0:
                 knx_value += 0x100
-            return (knx_value & 0xFF,)
+            return DPTArray(knx_value & 0xFF)
         except ValueError:
             raise ConversionError(f"Could not serialize {cls.__name__}", value=value)
 
@@ -50,7 +51,8 @@ class DPTSignedRelativeValue(DPTNumeric):
 
 
 class DPTPercentV8(DPTSignedRelativeValue):
-    """Abstraction for KNX DPT_Percent_V8.
+    """
+    Abstraction for KNX DPT_Percent_V8.
 
     DPT 6.001
     """
@@ -62,7 +64,8 @@ class DPTPercentV8(DPTSignedRelativeValue):
 
 
 class DPTValue1Count(DPTSignedRelativeValue):
-    """Abstraction for KNX DPT_Value_1_Count.
+    """
+    Abstraction for KNX DPT_Value_1_Count.
 
     DPT 6.010
     """

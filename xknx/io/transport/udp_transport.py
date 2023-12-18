@@ -10,7 +10,7 @@ import asyncio
 import logging
 import socket
 from sys import platform
-from typing import Callable, cast
+from typing import Callable
 
 from xknx.exceptions import CommunicationError, CouldNotParseKNXIP
 from xknx.knxip import HPAI, KNXIPFrame
@@ -133,7 +133,7 @@ class UDPTransport(KNXIPTransport):
         return sock
 
     async def connect(self) -> None:
-        """Connect UDP socket. Open UDP port and build mulitcast socket if necessary."""
+        """Connect UDP socket. Open UDP port and build multicast socket if necessary."""
         udp_transport_factory = UDPTransport.UDPTransportFactory(
             data_received_callback=self.data_received_callback,
         )
@@ -142,16 +142,15 @@ class UDPTransport(KNXIPTransport):
             sock = UDPTransport.create_multicast_sock(
                 self.local_addr[0], self.remote_addr
             )
-            (transport, _) = await loop.create_datagram_endpoint(
+            (self.transport, _) = await loop.create_datagram_endpoint(
                 lambda: udp_transport_factory,
                 sock=sock,
             )
         else:
-            (transport, _) = await loop.create_datagram_endpoint(
+            (self.transport, _) = await loop.create_datagram_endpoint(
                 lambda: udp_transport_factory,
                 local_addr=self.local_addr,
             )
-        self.transport = cast(asyncio.DatagramTransport, transport)
 
     def send(self, knxipframe: KNXIPFrame, addr: tuple[str, int] | None = None) -> None:
         """Send KNXIPFrame to socket."""

@@ -8,6 +8,7 @@ from __future__ import annotations
 from xknx.exceptions import ConversionError
 
 from .dpt import DPTNumeric
+from .payload import DPTArray, DPTBinary
 
 
 class DPT2ByteFloat(DPTNumeric):
@@ -27,9 +28,9 @@ class DPT2ByteFloat(DPTNumeric):
     resolution = 0.01
 
     @classmethod
-    def from_knx(cls, raw: tuple[int, ...]) -> float:
+    def from_knx(cls, payload: DPTArray | DPTBinary) -> float:
         """Parse/deserialize from KNX/IP raw data."""
-        cls.test_bytesarray(raw)
+        raw = cls.validate_payload(payload)
         data = (raw[0] * 256) + raw[1]
         exponent = (data >> 11) & 0x0F
         significand = data & 0x7FF
@@ -46,25 +47,33 @@ class DPT2ByteFloat(DPTNumeric):
         return value
 
     @classmethod
-    def to_knx(cls, value: float) -> tuple[int, int]:
+    def to_knx(cls, value: float) -> DPTArray:
         """Serialize to KNX/IP raw data."""
         try:
-            knx_value = float(value)
-            if not cls._test_boundaries(knx_value):
+            value = float(value)
+            if not cls._test_boundaries(value):
                 raise ValueError
 
-            value = knx_value * 100
-            exponent = 0
-            while not -2048 <= value <= 2047:
-                exponent += 1
-                value /= 2
+            knx_value = value * 100
+            if round(knx_value) == 0:
+                # ETS converts values near 0 like this
+                # -0.0051 -> 0x87FF
+                # -0.005 -> 0x8000  ... we don't want this since its equivalent to -20.48
+                # 0.005 -> 0x0000
+                # 0.0051 -> 0x0001
+                return DPTArray((0x00, 0x00))
 
-            mantisse = int(round(value)) & 0x7FF
+            exponent = 0
+            while not -2048 <= knx_value <= 2047:
+                exponent += 1
+                knx_value /= 2
+
+            mantisse = int(round(knx_value)) & 0x7FF
             msb = exponent << 3 | mantisse >> 8
-            if value < 0:
+            if knx_value < 0:
                 msb |= 0x80
 
-            return msb, mantisse & 0xFF
+            return DPTArray((msb, mantisse & 0xFF))
         except ValueError:
             raise ConversionError(f"Could not serialize {cls.__name__}", value=value)
 
@@ -132,6 +141,7 @@ class DPTWsp(DPT2ByteFloat):
     dpt_sub_number = 5
     value_type = "wind_speed_ms"
     unit = "m/s"
+    ha_device_class = "wind_speed"
 
     value_min = 0
     value_max = 670760
@@ -212,6 +222,7 @@ class DPTVoltage(DPT2ByteFloat):
     dpt_sub_number = 20
     value_type = "voltage"
     unit = "mV"
+    ha_device_class = "voltage"
 
 
 class DPTCurrent(DPT2ByteFloat):
@@ -221,6 +232,7 @@ class DPTCurrent(DPT2ByteFloat):
     dpt_sub_number = 21
     value_type = "curr"
     unit = "mA"
+    ha_device_class = "current"
 
 
 class DPTPowerDensity(DPT2ByteFloat):
@@ -292,6 +304,7 @@ class DPTWspKmh(DPT2ByteFloat):
     dpt_sub_number = 28
     value_type = "wind_speed_kmh"
     unit = "km/h"
+    ha_device_class = "wind_speed"
 
     value_min = 0
     value_max = 670760

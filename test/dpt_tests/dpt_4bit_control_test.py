@@ -2,13 +2,14 @@
 import pytest
 
 from xknx.dpt import (
+    DPTBinary,
     DPTControlStartStop,
     DPTControlStartStopBlinds,
     DPTControlStartStopDimming,
     DPTControlStepCode,
     DPTControlStepwise,
 )
-from xknx.exceptions import ConversionError
+from xknx.exceptions import ConversionError, CouldNotParseTelegram
 
 
 class TestDPTControlStepCode:
@@ -21,7 +22,7 @@ class TestDPTControlStepCode:
             raw = DPTControlStepCode.to_knx(
                 {"control": control, "step_code": rawref & 0x07}
             )
-            assert raw == (rawref,)
+            assert raw == DPTBinary(rawref)
 
     def test_to_knx_wrong_type(self):
         """Test serializing wrong type to DPTControlStepCode."""
@@ -60,13 +61,13 @@ class TestDPTControlStepCode:
         for raw in range(16):
             control = 1 if raw >> 3 else 0
             valueref = {"control": control, "step_code": raw & 0x07}
-            value = DPTControlStepCode.from_knx((raw,))
+            value = DPTControlStepCode.from_knx(DPTBinary((raw,)))
             assert value == valueref
 
     def test_from_knx_wrong_value(self):
         """Test parsing invalid DPTControlStepCode type from KNX."""
         with pytest.raises(ConversionError):
-            DPTControlStepCode.from_knx((0x1F,))
+            DPTControlStepCode.from_knx(DPTBinary((0x1F,)))
 
     def test_unit(self):
         """Test unit_of_measurement function."""
@@ -76,52 +77,64 @@ class TestDPTControlStepCode:
 class TestDPTControlStepwise:
     """Test class for DPTControlStepwise objects."""
 
-    def test_to_knx(self):
+    @pytest.mark.parametrize(
+        ("raw", "value"),
+        [
+            (0xF, 1),
+            (0xE, 3),
+            (0xD, 6),
+            (0xC, 12),
+            (0xB, 25),
+            (0xA, 50),
+            (0x9, 100),
+            (0x7, -1),
+            (0x6, -3),
+            (0x5, -6),
+            (0x4, -12),
+            (0x3, -25),
+            (0x2, -50),
+            (0x1, -100),
+            (0x0, 0),
+        ],
+    )
+    def test_to_knx(self, raw, value):
         """Test serializing values to DPTControlStepwise."""
-        assert DPTControlStepwise.to_knx(1) == (0xF,)
-        assert DPTControlStepwise.to_knx(3) == (0xE,)
-        assert DPTControlStepwise.to_knx(6) == (0xD,)
-        assert DPTControlStepwise.to_knx(12) == (0xC,)
-        assert DPTControlStepwise.to_knx(25) == (0xB,)
-        assert DPTControlStepwise.to_knx(50) == (0xA,)
-        assert DPTControlStepwise.to_knx(100) == (0x9,)
-        assert DPTControlStepwise.to_knx(-1) == (0x7,)
-        assert DPTControlStepwise.to_knx(-3) == (0x6,)
-        assert DPTControlStepwise.to_knx(-6) == (0x5,)
-        assert DPTControlStepwise.to_knx(-12) == (0x4,)
-        assert DPTControlStepwise.to_knx(-25) == (0x3,)
-        assert DPTControlStepwise.to_knx(-50) == (0x2,)
-        assert DPTControlStepwise.to_knx(-100) == (0x1,)
-        assert DPTControlStepwise.to_knx(0) == (0x0,)
+        assert DPTControlStepwise.to_knx(value) == DPTBinary(raw)
 
     def test_to_knx_wrong_type(self):
         """Test serializing wrong type to DPTControlStepwise."""
         with pytest.raises(ConversionError):
             DPTControlStepwise.to_knx("")
 
-    def test_from_knx(self):
+    @pytest.mark.parametrize(
+        ("raw", "value"),
+        [
+            (0xF, 1),
+            (0xE, 3),
+            (0xD, 6),
+            (0xC, 12),
+            (0xB, 25),
+            (0xA, 50),
+            (0x9, 100),
+            (0x8, 0),
+            (0x7, -1),
+            (0x6, -3),
+            (0x5, -6),
+            (0x4, -12),
+            (0x3, -25),
+            (0x2, -50),
+            (0x1, -100),
+            (0x0, 0),
+        ],
+    )
+    def test_from_knx(self, raw, value):
         """Test parsing DPTControlStepwise types from KNX."""
-        assert DPTControlStepwise.from_knx((0xF,)) == 1
-        assert DPTControlStepwise.from_knx((0xE,)) == 3
-        assert DPTControlStepwise.from_knx((0xD,)) == 6
-        assert DPTControlStepwise.from_knx((0xC,)) == 12
-        assert DPTControlStepwise.from_knx((0xB,)) == 25
-        assert DPTControlStepwise.from_knx((0xA,)) == 50
-        assert DPTControlStepwise.from_knx((0x9,)) == 100
-        assert DPTControlStepwise.from_knx((0x8,)) == 0
-        assert DPTControlStepwise.from_knx((0x7,)) == -1
-        assert DPTControlStepwise.from_knx((0x6,)) == -3
-        assert DPTControlStepwise.from_knx((0x5,)) == -6
-        assert DPTControlStepwise.from_knx((0x4,)) == -12
-        assert DPTControlStepwise.from_knx((0x3,)) == -25
-        assert DPTControlStepwise.from_knx((0x2,)) == -50
-        assert DPTControlStepwise.from_knx((0x1,)) == -100
-        assert DPTControlStepwise.from_knx((0x0,)) == 0
+        assert DPTControlStepwise.from_knx(DPTBinary(raw)) == value
 
     def test_from_knx_wrong_value(self):
         """Test parsing invalid DPTControlStepwise type from KNX."""
         with pytest.raises(ConversionError):
-            DPTControlStepwise.from_knx((0x1F,))
+            DPTControlStepwise.from_knx(DPTBinary(0x1F))
 
     def test_unit(self):
         """Test unit_of_measurement function."""
@@ -135,13 +148,13 @@ class TestDPTControlStartStop:
         """Test serializing dimming commands to KNX."""
         assert DPTControlStartStopDimming.to_knx(
             DPTControlStartStopDimming.Direction.INCREASE
-        ) == (9,)
+        ) == DPTBinary(9)
         assert DPTControlStartStopDimming.to_knx(
             DPTControlStartStopDimming.Direction.DECREASE
-        ) == (1,)
+        ) == DPTBinary(1)
         assert DPTControlStartStopDimming.to_knx(
             DPTControlStartStopDimming.Direction.STOP
-        ) == (0,)
+        ) == DPTBinary(0)
 
     def test_mode_to_knx_wrong_value(self):
         """Test serializing invalid data type to KNX."""
@@ -157,11 +170,14 @@ class TestDPTControlStartStop:
                 expected_direction = DPTControlStartStopDimming.Direction.STOP
             elif i < 8:
                 expected_direction = DPTControlStartStopDimming.Direction.DECREASE
-            assert DPTControlStartStopDimming.from_knx((i,)) == expected_direction
+            assert (
+                DPTControlStartStopDimming.from_knx(DPTBinary((i,)))
+                == expected_direction
+            )
 
     def test_mode_from_knx_wrong_value(self):
         """Test serializing invalid data type to KNX."""
-        with pytest.raises(ConversionError):
+        with pytest.raises(CouldNotParseTelegram):
             DPTControlStartStopDimming.from_knx(1)
 
     def test_direction_names(self):

@@ -6,17 +6,19 @@ import time
 from xknx.exceptions import ConversionError
 
 from .dpt import DPTBase
+from .payload import DPTArray, DPTBinary
 
 
 class DPTDate(DPTBase):
     """Abstraction for KNX 3 octet date (DPT 11.001)."""
 
+    payload_type = DPTArray
     payload_length = 3
 
     @classmethod
-    def from_knx(cls, raw: tuple[int, ...]) -> time.struct_time:
+    def from_knx(cls, payload: DPTArray | DPTBinary) -> time.struct_time:
         """Parse/deserialize from KNX/IP raw data."""
-        cls.test_bytesarray(raw)
+        raw = cls.validate_payload(payload)
 
         day = raw[0] & 0x1F
         month = raw[1] & 0x0F
@@ -37,7 +39,7 @@ class DPTDate(DPTBase):
             raise ConversionError("Could not parse DPTDate", raw=raw)
 
     @classmethod
-    def to_knx(cls, value: time.struct_time) -> tuple[int, int, int]:
+    def to_knx(cls, value: time.struct_time) -> DPTArray:
         """Serialize to KNX/IP raw data from time.struct_time."""
 
         def _knx_year(year: int) -> int:
@@ -50,7 +52,13 @@ class DPTDate(DPTBase):
         if not isinstance(value, time.struct_time):
             raise ConversionError("Could not serialize DPTDate", value=value)
 
-        return (value.tm_mday, value.tm_mon, _knx_year(value.tm_year))
+        return DPTArray(
+            (
+                value.tm_mday,
+                value.tm_mon,
+                _knx_year(value.tm_year),
+            )
+        )
 
     @staticmethod
     def _test_range(day: int, month: int, year: int) -> bool:

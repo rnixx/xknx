@@ -7,11 +7,12 @@ from xknx.knxip import (
     HPAI,
     ConnectionStateRequest,
     ConnectRequest,
-    ConnectRequestType,
     ConnectResponse,
+    ConnectResponseData,
     ErrorCode,
     KNXIPFrame,
 )
+from xknx.telegram import IndividualAddress
 
 
 class TestConnect:
@@ -29,7 +30,6 @@ class TestConnect:
         # Expected KNX/IP-Frame:
         exp_knxipframe = KNXIPFrame.init_from_body(
             ConnectRequest(
-                request_type=ConnectRequestType.TUNNEL_CONNECTION,
                 control_endpoint=local_hpai,
                 data_endpoint=local_hpai,
             )
@@ -65,13 +65,13 @@ class TestConnect:
         res_knxipframe = KNXIPFrame.init_from_body(
             ConnectResponse(
                 communication_channel=23,
-                identifier=7,
+                crd=ConnectResponseData(individual_address=IndividualAddress(7)),
             )
         )
         connect.response_rec_callback(res_knxipframe, HPAI(), None)
         assert connect.success
         assert connect.communication_channel == 23
-        assert connect.identifier == 7
+        assert connect.crd.individual_address.raw == 7
 
     async def test_connect_route_back_true(self):
         """Test connecting from KNX bus."""
@@ -83,9 +83,7 @@ class TestConnect:
         assert connect.awaited_response_class == ConnectResponse
 
         # Expected KNX/IP-Frame:
-        exp_knxipframe = KNXIPFrame.init_from_body(
-            ConnectRequest(request_type=ConnectRequestType.TUNNEL_CONNECTION)
-        )
+        exp_knxipframe = KNXIPFrame.init_from_body(ConnectRequest())
         with patch("xknx.io.transport.UDPTransport.send") as mock_udp_send, patch(
             "xknx.io.transport.UDPTransport.getsockname"
         ) as mock_udp_getsockname:
@@ -116,10 +114,10 @@ class TestConnect:
         res_knxipframe = KNXIPFrame.init_from_body(
             ConnectResponse(
                 communication_channel=23,
-                identifier=7,
+                crd=ConnectResponseData(individual_address=IndividualAddress(7)),
             )
         )
         connect.response_rec_callback(res_knxipframe, HPAI(), None)
         assert connect.success
         assert connect.communication_channel == 23
-        assert connect.identifier == 7
+        assert connect.crd.individual_address.raw == 7

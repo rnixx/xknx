@@ -35,7 +35,7 @@ class TestStateUpdater:
         xknx.state_updater.unregister_remote_value(remote_value_1)
         # only remote_value_2 remaining
         assert len(xknx.state_updater._workers) == 1
-        assert list(xknx.state_updater._workers.keys())[0] == id(remote_value_2)
+        assert next(iter(xknx.state_updater._workers.keys())) == id(remote_value_2)
         # unregister on RemoteValue.__del__()
         remote_value_2.__del__()
         assert len(xknx.state_updater._workers) == 0
@@ -125,7 +125,7 @@ class TestStateUpdater:
         assert _get_only_tracker().update_interval == 60 * 60
         remote_value_invalid.__del__()
         logging_warning_mock.reset_mock()
-        # intervall too long
+        # interval too long
         remote_value_long = RemoteValue(
             xknx, sync_state=1441, group_address_state=GroupAddress("1/1/1")
         )

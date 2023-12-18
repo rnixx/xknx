@@ -37,6 +37,7 @@ from xknx.secure.security_primitives import (
     generate_ecdh_key_pair,
 )
 from xknx.secure.util import bytes_xor, sha256_hash
+from xknx.util import asyncio_timeout
 
 from .const import SESSION_KEEPALIVE_RATE, XKNX_SERIAL_NUMBER
 from .request_response import Authenticate, Session
@@ -339,7 +340,7 @@ class SecureSession(TCPTransport, _IPSecureTransportLayer):
         if self.initialized:
             knx_logger.debug("Encrypting frame: %s", knxipframe)
             knxipframe = self.encrypt_frame(plain_frame=knxipframe)
-            # keepalive timer is started with first and resetted with every other
+            # keepalive timer is started with first and reset with every other
             # SecureWrapper frame (including wrapped keepalive frames themselves)
             self.start_keepalive_task()
         # TODO: disallow sending unencrypted frames over non-initialized session with
@@ -441,7 +442,6 @@ class SecureGroup(UDPTransport, _IPSecureTransportLayer):
             secure_wrapper = knxipframe.body
             try:
                 knxipframe = self.decrypt_frame(knxipframe)
-                print(secure_wrapper)
             except KNXSecureValidationError as err:
                 ip_secure_logger.warning("Could not decrypt KNXIPFrame: %s", err)
                 # Frame shall be discarded
@@ -673,13 +673,11 @@ class SecureSequenceTimer:
         self._expected_notify_handler = message_tag, waiter_fut
         self.send_timer_notify(message_tag=message_tag)
         try:
-            timer_value = await asyncio.wait_for(
-                waiter_fut,
-                timeout=(  # 3.3 seconds at latency_ms=1000, sync_latency_fraction=10%
-                    self.max_delay_time_follower_update_notify
-                    + 2 * self.latency_tolerance_ms / 1000
-                ),
-            )
+            async with asyncio_timeout(  # 3.3 seconds at latency_ms=1000, sync_latency_fraction=10%
+                self.max_delay_time_follower_update_notify
+                + 2 * self.latency_tolerance_ms / 1000
+            ):
+                timer_value = await waiter_fut
             self.update(new_value=timer_value)
         except asyncio.TimeoutError:
             # use highest received timer value of TimerNotify or SecureWrapper frames

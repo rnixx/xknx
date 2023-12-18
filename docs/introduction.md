@@ -34,7 +34,7 @@ asyncio.run(main())
 async def main():
 ```
 
-`main()` function. The `async` qualifier markes the function asy an asyncio function. See [asyncio](https://www.python.org/dev/peps/pep-3156/) documentation for details.
+`main()` function. The `async` qualifier marks the function asy an asyncio function. See [asyncio](https://www.python.org/dev/peps/pep-3156/) documentation for details.
 
 
 ```python
@@ -47,7 +47,7 @@ Initialization of XKNX object. Constructor may take several arguments like a ref
     await xknx.start()
 ```
 
-Asynchronous start of the XKNX object. `xknx.start()` will connect to a KNX/IP device and either build a tunnel or connect through Mulitcast UDP.
+Asynchronous start of the XKNX object. `xknx.start()` will connect to a KNX/IP device and either build a tunnel or connect through Multicast UDP.
 
 ```python
     await xknx.stop()

@@ -4,6 +4,7 @@ from __future__ import annotations
 from xknx.exceptions import ConversionError
 
 from .dpt import DPTNumeric
+from .payload import DPTArray, DPTBinary
 
 
 class DPTScaling(DPTNumeric):
@@ -24,23 +25,20 @@ class DPTScaling(DPTNumeric):
     resolution = 1
 
     @classmethod
-    def from_knx(cls, raw: tuple[int, ...]) -> int:
+    def from_knx(cls, payload: DPTArray | DPTBinary) -> int:
         """Parse/deserialize from KNX/IP raw data."""
-        cls.test_bytesarray(raw)
-
-        knx_value = raw[0]
+        knx_value = cls.validate_payload(payload)[0]
         delta = cls.value_max - cls.value_min
         value = round((knx_value / 255) * delta) + cls.value_min
 
         if not cls._test_boundaries(value):
             raise ConversionError(
-                f"Could not parse {cls.__name__}", value=value, raw=raw
+                f"Could not parse {cls.__name__}", value=value, payload=payload
             )
-
         return value
 
     @classmethod
-    def to_knx(cls, value: float) -> tuple[int]:
+    def to_knx(cls, value: float) -> DPTArray:
         """Serialize to KNX/IP raw data."""
         try:
             percent_value = float(value)
@@ -49,7 +47,7 @@ class DPTScaling(DPTNumeric):
             delta = cls.value_max - cls.value_min
             knx_value = round((percent_value - cls.value_min) / delta * 255)
 
-            return (knx_value,)
+            return DPTArray(knx_value)
         except ValueError:
             raise ConversionError(f"Could not serialize {cls.__name__}", value=value)
 

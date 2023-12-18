@@ -109,7 +109,7 @@ class Fan(Device):
             after_update_cb=self.after_update,
         )
 
-    def _iter_remote_values(self) -> Iterator[RemoteValue[Any, Any]]:
+    def _iter_remote_values(self) -> Iterator[RemoteValue[Any]]:
         """Iterate the devices RemoteValue classes."""
         yield from (self.switch, self.speed, self.oscillation)
 
@@ -151,7 +151,7 @@ class Fan(Device):
         """Set the fan oscillation mode on or off."""
         await self.oscillation.set(oscillation)
 
-    async def process_group_write(self, telegram: "Telegram") -> None:
+    async def process_group_write(self, telegram: Telegram) -> None:
         """Process incoming and outgoing GROUP WRITE telegram."""
         await self.switch.process(telegram)
         await self.speed.process(telegram)

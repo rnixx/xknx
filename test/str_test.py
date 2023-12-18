@@ -2,7 +2,13 @@
 from unittest.mock import patch
 
 from xknx import XKNX
-from xknx.cemi import CEMIFrame
+from xknx.cemi import (
+    CEMIFrame,
+    CEMILData,
+    CEMIMessageCode,
+    CEMIMPropInfo,
+    CEMIMPropReadResponse,
+)
 from xknx.devices import (
     BinarySensor,
     Climate,
@@ -35,6 +41,7 @@ from xknx.knxip import (
     ConnectRequest,
     ConnectRequestType,
     ConnectResponse,
+    ConnectResponseData,
     DIBDeviceInformation,
     DIBGeneric,
     DIBServiceFamily,
@@ -44,15 +51,20 @@ from xknx.knxip import (
     HostProtocol,
     KNXIPFrame,
     KNXIPHeader,
-    KNXIPServiceType,
     KNXMedium,
     RoutingIndication,
     SearchRequest,
     SearchResponse,
     SearchResponseExtended,
     TunnellingAck,
+    TunnellingFeatureGet,
+    TunnellingFeatureInfo,
+    TunnellingFeatureResponse,
+    TunnellingFeatureSet,
+    TunnellingFeatureType,
     TunnellingRequest,
 )
+from xknx.profile.const import ResourceKNXNETIPPropertyId, ResourceObjectType
 from xknx.remote_value import RemoteValue
 from xknx.telegram import GroupAddress, IndividualAddress, Telegram, TelegramDirection
 from xknx.telegram.apci import GroupValueWrite
@@ -374,7 +386,7 @@ class TestStringRepresentations:
         date_time = DateTime(xknx, name="Zeit", group_address="1/2/3", localtime=False)
         assert (
             str(date_time)
-            == '<DateTime name="Zeit" _remote_value=<1/2/3, None, [], None /> broadcast_type="TIME" />'
+            == '<DateTime name="Zeit" remote_value=<1/2/3, None, [], None /> broadcast_type="TIME" />'
         )
 
     def test_could_not_parse_telegramn_exception(self):
@@ -526,21 +538,23 @@ class TestStringRepresentations:
         assert (
             str(connect_request)
             == '<ConnectRequest control_endpoint="192.168.42.1:33941/udp" data_endpoint="192.168.42.2:33942/udp" '
-            'request_type="ConnectRequestType.TUNNEL_CONNECTION" flags="0x2" />'
+            'cri="<ConnectRequestInformation connection_type="TUNNEL_CONNECTION" knx_layer="DATA_LINK_LAYER" />" />'
         )
 
     def test_connect_response(self):
         """Test string representatoin of KNX/IP ConnectResponse."""
         connect_response = ConnectResponse()
         connect_response.communication_channel = 13
-        connect_response.request_type = ConnectRequestType.TUNNEL_CONNECTION
         connect_response.data_endpoint = HPAI(ip_addr="192.168.42.1", port=33941)
-        connect_response.identifier = 42
+        connect_response.crd = ConnectResponseData(
+            request_type=ConnectRequestType.TUNNEL_CONNECTION,
+            individual_address=IndividualAddress("1.2.3"),
+        )
         assert (
             str(connect_response)
             == '<ConnectResponse communication_channel="13" status_code="ErrorCode.E_NO_ERROR" '
             'data_endpoint="192.168.42.1:33941/udp" '
-            'request_type="ConnectRequestType.TUNNEL_CONNECTION" identifier="42" />'
+            'crd="<ConnectResponseData request_type="ConnectRequestType.TUNNEL_CONNECTION" individual_address="1.2.3" />" />'
         )
 
     def test_disconnect_request(self):
@@ -639,19 +653,94 @@ class TestStringRepresentations:
             == '<TunnellingAck communication_channel_id="23" sequence_counter="42" status_code="ErrorCode.E_NO_ERROR" />'
         )
 
-    def test_cemi_frame(self):
+    def test_tunnelling_feature_get(self):
+        """Test string representation of KNX/IP TunnellingFeatureGet."""
+        tunnelling_feature = TunnellingFeatureGet()
+        tunnelling_feature.communication_channel_id = 23
+        tunnelling_feature.sequence_counter = 42
+        tunnelling_feature.feature_type = TunnellingFeatureType.BUS_CONNECTION_STATUS
+        assert (
+            str(tunnelling_feature)
+            == '<TunnellingFeatureGet communication_channel_id="23" sequence_counter="42" '
+            'feature_type="TunnellingFeatureType.BUS_CONNECTION_STATUS" />'
+        )
+
+    def test_tunnelling_feature_info(self):
+        """Test string representation of KNX/IP TunnellingFeatureInfo."""
+        tunnelling_feature = TunnellingFeatureInfo()
+        tunnelling_feature.communication_channel_id = 23
+        tunnelling_feature.sequence_counter = 42
+        tunnelling_feature.feature_type = TunnellingFeatureType.BUS_CONNECTION_STATUS
+        tunnelling_feature.data = b"\x01\x00"
+        assert (
+            str(tunnelling_feature)
+            == '<TunnellingFeatureInfo communication_channel_id="23" sequence_counter="42" '
+            'feature_type="TunnellingFeatureType.BUS_CONNECTION_STATUS" data="0100" />'
+        )
+
+    def test_tunnelling_feature_response(self):
+        """Test string representation of KNX/IP TunnellingFeatureResponse."""
+        tunnelling_feature = TunnellingFeatureResponse()
+        tunnelling_feature.communication_channel_id = 23
+        tunnelling_feature.sequence_counter = 42
+        tunnelling_feature.feature_type = TunnellingFeatureType.BUS_CONNECTION_STATUS
+        tunnelling_feature.data = b"\x01\x00"
+        assert (
+            str(tunnelling_feature)
+            == '<TunnellingFeatureResponse communication_channel_id="23" sequence_counter="42" status_code="ErrorCode.E_NO_ERROR" '
+            'feature_type="TunnellingFeatureType.BUS_CONNECTION_STATUS" data="0100" />'
+        )
+
+    def test_tunnelling_feature_set(self):
+        """Test string representation of KNX/IP TunnellingFeatureSet."""
+        tunnelling_feature = TunnellingFeatureSet()
+        tunnelling_feature.communication_channel_id = 23
+        tunnelling_feature.sequence_counter = 42
+        tunnelling_feature.feature_type = (
+            TunnellingFeatureType.INTERFACE_FEATURE_INFO_ENABLE
+        )
+        tunnelling_feature.data = b"\x01\x00"
+        assert (
+            str(tunnelling_feature)
+            == '<TunnellingFeatureSet communication_channel_id="23" sequence_counter="42" '
+            'feature_type="TunnellingFeatureType.INTERFACE_FEATURE_INFO_ENABLE" data="0100" />'
+        )
+
+    def test_cemi_ldata_frame(self):
         """Test string representation of KNX/IP CEMI Frame."""
-        cemi_frame = CEMIFrame.init_from_telegram(
-            Telegram(
-                destination_address=GroupAddress("1/2/5"),
-                payload=GroupValueWrite(DPTBinary(7)),
+        cemi_frame = CEMIFrame(
+            code=CEMIMessageCode.L_DATA_IND,
+            data=CEMILData.init_from_telegram(
+                telegram=Telegram(
+                    destination_address=GroupAddress("1/2/5"),
+                    payload=GroupValueWrite(DPTBinary(7)),
+                ),
+                src_addr=IndividualAddress("1.2.3"),
             ),
-            src_addr=IndividualAddress("1.2.3"),
         )
         assert (
             str(cemi_frame)
-            == '<CEMIFrame code="L_DATA_IND" src_addr="IndividualAddress("1.2.3")" dst_addr="GroupAddress("1/2/5")" '
-            'flags="1011110011100000" tpci="TDataGroup()" payload="<GroupValueWrite value="<DPTBinary value="7" />" />" />'
+            == '<CEMIFrame code="L_DATA_IND" info="CEMIInfo("")" data="CEMILData(src_addr="IndividualAddress("1.2.3")" '
+            'dst_addr="GroupAddress("1/2/5")" flags="1011110011100000" tpci="TDataGroup()" '
+            'payload="<GroupValueWrite value="<DPTBinary value="7" />" />")" />'
+        )
+
+    def test_cemi_mprop_frame(self):
+        """Test string representation of KNX/IP CEMI Frame."""
+        cemi_frame = CEMIFrame(
+            code=CEMIMessageCode.M_PROP_READ_REQ,
+            data=CEMIMPropReadResponse(
+                property_info=CEMIMPropInfo(
+                    object_type=ResourceObjectType.OBJECT_KNXNETIP_PARAMETER,
+                    property_id=ResourceKNXNETIPPropertyId.PID_KNX_INDIVIDUAL_ADDRESS,
+                ),
+                data=IndividualAddress("1.2.3").to_knx(),
+            ),
+        )
+        assert (
+            str(cemi_frame)
+            == '<CEMIFrame code="M_PROP_READ_REQ" data="CEMIMPropReadResponse(object_type="11" object_instance="1" '
+            'property_id="52" number_of_elements="1" start_index="1" error_code="None" data="1203" )" />'
         )
 
     def test_knxip_frame(self):

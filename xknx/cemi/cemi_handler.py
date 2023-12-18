@@ -15,13 +15,16 @@ from xknx.exceptions import (
     CommunicationError,
     ConfirmationError,
     ConversionError,
+    CouldNotParseCEMI,
     DataSecureError,
+    UnsupportedCEMIMessage,
 )
 from xknx.secure.data_secure import DataSecure
 from xknx.secure.keyring import Keyring
 from xknx.telegram import IndividualAddress, Telegram, TelegramDirection, tpci
+from xknx.util import asyncio_timeout
 
-from .cemi_frame import CEMIFrame
+from .cemi_frame import CEMIFrame, CEMILData
 from .const import CEMIMessageCode
 
 if TYPE_CHECKING:
@@ -52,56 +55,82 @@ class CEMIHandler:
 
     async def send_telegram(self, telegram: Telegram) -> None:
         """Create a CEMIFrame from a Telegram and send it to the CEMI Server."""
-        cemi = CEMIFrame.init_from_telegram(
+        cemi_data = CEMILData.init_from_telegram(
             telegram=telegram,
-            code=CEMIMessageCode.L_DATA_REQ,
             src_addr=(
                 self.xknx.current_address if telegram.source_address.raw == 0 else None
             ),
         )
+        cemi = CEMIFrame(
+            code=CEMIMessageCode.L_DATA_REQ,
+            data=cemi_data,
+        )
+
         logger.debug("Outgoing CEMI: %s", cemi)
         if self.data_secure is not None:
-            cemi = self.data_secure.outgoing_cemi(cemi=cemi)
-
+            cemi.data = self.data_secure.outgoing_cemi(cemi_data=cemi_data)
         self._l_data_confirmation_event.clear()
         try:
             await self.xknx.knxip_interface.send_cemi(cemi)
         except (ConversionError, CommunicationError) as ex:
             logger.warning("Could not send CEMI frame: %s for %s", ex, cemi)
+            self.xknx.connection_manager.cemi_count_outgoing_error += 1
             raise ex
 
         try:
-            await asyncio.wait_for(
-                self._l_data_confirmation_event.wait(),
-                timeout=REQUEST_TO_CONFIRMATION_TIMEOUT,
-            )
+            async with asyncio_timeout(REQUEST_TO_CONFIRMATION_TIMEOUT):
+                await self._l_data_confirmation_event.wait()
         except asyncio.TimeoutError:
+            self.xknx.connection_manager.cemi_count_outgoing_error += 1
             raise ConfirmationError(
                 f"L_DATA_CON Data Link Layer confirmation timed out for {cemi}"
             )
+        self.xknx.connection_manager.cemi_count_outgoing += 1
+
+    def handle_raw_cemi(self, raw_cemi: bytes) -> None:
+        """Parse and handle incoming raw CEMI Frames."""
+        try:
+            cemi = CEMIFrame.from_knx(raw_cemi)
+        except CouldNotParseCEMI as cemi_parse_err:
+            logger.warning("CEMI Frame failed to parse: %s", cemi_parse_err)
+            self.xknx.connection_manager.cemi_count_incoming_error += 1
+            return
+        except UnsupportedCEMIMessage as unsupported_cemi_err:
+            logger.info("CEMI not supported: %s", unsupported_cemi_err)
+            self.xknx.connection_manager.cemi_count_incoming_error += 1
+            return
+        self.handle_cemi_frame(cemi)
 
     def handle_cemi_frame(self, cemi: CEMIFrame) -> None:
-        """Parse and handle incoming CEMI Frames."""
-        logger.debug("Incoming CEMI: %s", cemi)
+        """Handle incoming CEMI Frames."""
+        if not isinstance(cemi.data, CEMILData):
+            logger.debug("Ignoring incoming non-link-layer CEMI: %s", cemi)
+            return
 
         if cemi.code is CEMIMessageCode.L_DATA_CON:
             # L_DATA_CON confirmation frame signals ready to send next telegram
             self._l_data_confirmation_event.set()
+            logger.debug("Incoming CEMI confirmation: %s", cemi)
             return
         if cemi.code is CEMIMessageCode.L_DATA_REQ:
             # L_DATA_REQ frames should only be outgoing.
             logger.warning("Received unexpected L_DATA_REQ frame: %s", cemi)
+            self.xknx.connection_manager.cemi_count_incoming_error += 1
             return
+        logger.debug("Incoming CEMI: %s", cemi)
 
-        # TODO: do we have to decrypt Data Secure L_DATA_CON?
         if self.data_secure is not None:
             try:
-                cemi = self.data_secure.received_cemi(cemi=cemi)
+                cemi.data = self.data_secure.received_cemi(cemi_data=cemi.data)
             except DataSecureError as err:
-                data_secure_logger.warning("Could not decrypt CEMI frame: %s", err)
+                data_secure_logger.log(
+                    err.log_level,
+                    "Could not decrypt CEMI frame: %s",
+                    err,
+                )
                 return
-        # TODO: remove telegram init from CEMIFrame class and move it here?
-        telegram = cemi.telegram
+        self.xknx.connection_manager.cemi_count_incoming += 1
+        telegram = cemi.data.telegram()
         telegram.direction = TelegramDirection.INCOMING
         self.telegram_received(telegram)
 

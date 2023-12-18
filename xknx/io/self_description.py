@@ -6,7 +6,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Final
 
-from xknx.exceptions import CommunicationError
+from xknx.exceptions import CommunicationError, XKNXException
 from xknx.io import util
 from xknx.io.gateway_scanner import GatewayDescriptor
 from xknx.knxip import (
@@ -19,6 +19,7 @@ from xknx.knxip import (
     SearchRequestExtended,
     SearchResponseExtended,
 )
+from xknx.util import asyncio_timeout
 
 from .const import DEFAULT_MCAST_PORT
 from .transport import UDPTransport
@@ -48,6 +49,11 @@ async def request_description(
                 f"No network interface found to request gateway info from {gateway_ip}:{gateway_port}"
             )
         route_back = True
+    try:
+        local_ip = await util.validate_ip(local_ip, address_name="Local IP")
+        gateway_ip = await util.validate_ip(gateway_ip, address_name="Gateway IP")
+    except XKNXException as err:
+        raise CommunicationError("Invalid address") from err
 
     transport = UDPTransport(
         local_addr=(local_ip, local_port),
@@ -58,7 +64,7 @@ async def request_description(
         await transport.connect()
     except OSError as err:
         raise CommunicationError(
-            "Could not setup socket to request gatway info"
+            "Could not setup socket to request gateway info"
         ) from err
     else:
         local_hpai: HPAI
@@ -123,10 +129,8 @@ class _SelfDescriptionQuery(ABC):
         frame = self.create_knxipframe()
         try:
             self.transport.send(frame)
-            await asyncio.wait_for(
-                self.response_received_event.wait(),
-                timeout=DESCRIPTION_TIMEOUT,
-            )
+            async with asyncio_timeout(DESCRIPTION_TIMEOUT):
+                await self.response_received_event.wait()
         except asyncio.TimeoutError:
             logger.debug(
                 "Error: KNX bus did not respond in time (%s secs) to request of type '%s'",
@@ -149,7 +153,7 @@ class _SelfDescriptionQuery(ABC):
             )
             return
         self.response_received_event.set()
-        # Set gateway descriptior attribute
+        # Set gateway descriptor attribute
         gateway = GatewayDescriptor(
             ip_addr=self.transport.remote_addr[0],
             port=self.transport.remote_addr[1],

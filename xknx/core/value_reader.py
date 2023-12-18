@@ -2,7 +2,7 @@
 Module for reading the value of a specific KNX group address from KNX bus.
 
 The module will
-* ... send a group_read to the selected gruop address.
+* ... send a group_read to the selected group address.
 * ... register a callback for receiving telegrams within telegram queue.
 * ... check if received telegrams have the correct group address.
 * ... store the received telegram for further processing.
@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from xknx.telegram import Telegram
 from xknx.telegram.address import GroupAddress, InternalGroupAddress
 from xknx.telegram.apci import GroupValueRead, GroupValueResponse, GroupValueWrite
+from xknx.util import asyncio_timeout
 
 if TYPE_CHECKING:
     from xknx.xknx import XKNX
@@ -49,10 +50,8 @@ class ValueReader:
         await self.send_group_read()
 
         try:
-            await asyncio.wait_for(
-                self.response_received_event.wait(),
-                timeout=self.timeout_in_seconds,
-            )
+            async with asyncio_timeout(self.timeout_in_seconds):
+                await self.response_received_event.wait()
         except asyncio.TimeoutError:
             logger.warning(
                 "Error: KNX bus did not respond in time (%s secs) to GroupValueRead request for: %s",

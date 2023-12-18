@@ -35,6 +35,7 @@ from xknx.knxip.dib import (
     TunnelingSlotStatus,
 )
 from xknx.telegram import IndividualAddress
+from xknx.util import asyncio_timeout
 
 from .transport import UDPTransport
 
@@ -131,7 +132,8 @@ class GatewayDescriptor:
 
 
 class GatewayScanFilter:
-    """Filter to limit gateway scan results.
+    """
+    Filter to limit gateway scan results.
 
     If `name` doesn't match the gateway name, the gateway will be ignored.
 
@@ -242,13 +244,14 @@ class GatewayScanner:
         self, queue: asyncio.Queue[GatewayDescriptor | None] | None = None
     ) -> None:
         """Scan for gateways."""
-        local_ip = self.local_ip or await util.get_default_local_ip(
+        _local_ip = self.local_ip or await util.get_default_local_ip(
             remote_ip=self.xknx.multicast_group
         )
-        if local_ip is None:
+        if _local_ip is None:
             if queue is not None:
                 queue.put_nowait(None)
             raise XKNXException("No usable network interface found.")
+        local_ip = await util.validate_ip(_local_ip)
         interface_name = util.get_local_interface_name(local_ip=local_ip)
         logger.debug("Searching on %s / %s", interface_name, local_ip)
 
@@ -265,10 +268,8 @@ class GatewayScanner:
         )
         try:
             await self._send_search_requests(udp_transport=udp_transport)
-            await asyncio.wait_for(
-                self._response_received_event.wait(),
-                timeout=self.timeout_in_seconds,
-            )
+            async with asyncio_timeout(self.timeout_in_seconds):
+                await self._response_received_event.wait()
         except asyncio.TimeoutError:
             pass
         except asyncio.CancelledError:

@@ -2,7 +2,7 @@
 Module for serialization and deserialization of KNX/IP packets.
 
 It consists of a header and a body.
-Depending on the service_type_ident different types of body classes are instanciated.
+Depending on the service_type_ident different types of body classes are instantiated.
 """
 from __future__ import annotations
 
@@ -15,6 +15,8 @@ from .connectionstate_request import ConnectionStateRequest
 from .connectionstate_response import ConnectionStateResponse
 from .description_request import DescriptionRequest
 from .description_response import DescriptionResponse
+from .device_configuration_ack import DeviceConfigurationAck
+from .device_configuration_request import DeviceConfigurationRequest
 from .disconnect_request import DisconnectRequest
 from .disconnect_response import DisconnectResponse
 from .header import KNXIPHeader
@@ -33,6 +35,12 @@ from .session_response import SessionResponse
 from .session_status import SessionStatus
 from .timer_notify import TimerNotify
 from .tunnelling_ack import TunnellingAck
+from .tunnelling_feature import (
+    TunnellingFeatureGet,
+    TunnellingFeatureInfo,
+    TunnellingFeatureResponse,
+    TunnellingFeatureSet,
+)
 from .tunnelling_request import TunnellingRequest
 
 
@@ -95,11 +103,24 @@ class KNXIPFrame:
             body = DisconnectRequest()
         elif header.service_type_ident == KNXIPServiceType.DISCONNECT_RESPONSE:
             body = DisconnectResponse()
-        # Tunneling
+        # Device Management
+        elif header.service_type_ident == KNXIPServiceType.DEVICE_CONFIGURATION_REQUEST:
+            body = DeviceConfigurationRequest()
+        elif header.service_type_ident == KNXIPServiceType.DEVICE_CONFIGURATION_ACK:
+            body = DeviceConfigurationAck()
+        # Tunnelling
         elif header.service_type_ident == KNXIPServiceType.TUNNELLING_REQUEST:
             body = TunnellingRequest()
         elif header.service_type_ident == KNXIPServiceType.TUNNELLING_ACK:
             body = TunnellingAck()
+        elif header.service_type_ident == KNXIPServiceType.TUNNELLING_FEATURE_GET:
+            body = TunnellingFeatureGet()
+        elif header.service_type_ident == KNXIPServiceType.TUNNELLING_FEATURE_INFO:
+            body = TunnellingFeatureInfo()
+        elif header.service_type_ident == KNXIPServiceType.TUNNELLING_FEATURE_RESPONSE:
+            body = TunnellingFeatureResponse()
+        elif header.service_type_ident == KNXIPServiceType.TUNNELLING_FEATURE_SET:
+            body = TunnellingFeatureSet()
         # Routing
         elif header.service_type_ident == KNXIPServiceType.ROUTING_INDICATION:
             body = RoutingIndication()

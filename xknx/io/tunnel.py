@@ -11,14 +11,11 @@ import logging
 from typing import TYPE_CHECKING
 
 from xknx.cemi import CEMIFrame
-from xknx.core import XknxConnectionState
-from xknx.exceptions import (
-    CommunicationError,
-    TunnellingAckError,
-    UnsupportedCEMIMessage,
-)
+from xknx.core import XknxConnectionState, XknxConnectionType
+from xknx.exceptions import CommunicationError, TunnellingAckError
 from xknx.knxip import (
     HPAI,
+    ConnectRequestInformation,
     DisconnectRequest,
     DisconnectResponse,
     HostProtocol,
@@ -41,12 +38,12 @@ if TYPE_CHECKING:
     from xknx.xknx import XKNX
 
 logger = logging.getLogger("xknx.log")
-cemi_logger = logging.getLogger("xknx.cemi")
 
 
 class _Tunnel(Interface):
     """Class for handling KNX/IP tunnels."""
 
+    connection_type: XknxConnectionType
     transport: KNXIPTransport
 
     def __init__(
@@ -70,6 +67,7 @@ class _Tunnel(Interface):
         self._initial_connection = True
         self._is_reconnecting = False
         self._reconnect_task: asyncio.Task[None] | None = None
+        self._requested_address: IndividualAddress | None = None
         self._src_address = IndividualAddress(0)
         self._send_lock = asyncio.Lock()
         # self._tunnelling_request_confirmation_event = asyncio.Event()
@@ -102,7 +100,7 @@ class _Tunnel(Interface):
     async def connect(self) -> bool:
         """Connect to a KNX tunneling interface. Returns True on success."""
         await self.xknx.connection_manager.connection_state_changed(
-            XknxConnectionState.CONNECTING
+            XknxConnectionState.CONNECTING, self.connection_type
         )
         try:
             await self.transport.connect()
@@ -128,7 +126,7 @@ class _Tunnel(Interface):
 
         self._tunnel_established()
         await self.xknx.connection_manager.connection_state_changed(
-            XknxConnectionState.CONNECTED
+            XknxConnectionState.CONNECTED, self.connection_type
         )
         return True
 
@@ -141,7 +139,7 @@ class _Tunnel(Interface):
     def _tunnel_lost(self) -> None:
         """Prepare for reconnection or shutdown when the connection is lost. Callback."""
         self.stop_heartbeat()
-        asyncio.create_task(
+        self.xknx.task_registry.background(
             self.xknx.connection_manager.connection_state_changed(
                 XknxConnectionState.DISCONNECTED
             )
@@ -186,7 +184,11 @@ class _Tunnel(Interface):
 
     async def _connect_request(self) -> bool:
         """Connect to tunnelling server. Set communication_channel and src_address."""
-        connect = Connect(transport=self.transport, local_hpai=self.local_hpai)
+        connect = Connect(
+            transport=self.transport,
+            local_hpai=self.local_hpai,
+            cri=ConnectRequestInformation(individual_address=self._requested_address),
+        )
         await connect.start()
         if connect.success:
             self.communication_channel = connect.communication_channel
@@ -197,7 +199,7 @@ class _Tunnel(Interface):
                 else connect.data_endpoint.addr_tuple
             )
             # Use the individual address provided by the tunnelling server
-            self._src_address = IndividualAddress(connect.identifier)
+            self._src_address = connect.crd.individual_address or IndividualAddress(0)
             self.xknx.current_address = self._src_address
             logger.debug(
                 "Tunnel established. communication_channel=%s, address=%s",
@@ -307,12 +309,7 @@ class _Tunnel(Interface):
         self, tunneling_request: TunnellingRequest
     ) -> None:
         """Handle incoming tunnel request."""
-        try:
-            cemi = CEMIFrame.from_knx(tunneling_request.raw_cemi)
-        except UnsupportedCEMIMessage as unsupported_cemi_err:
-            logger.warning("CEMI not supported: %s", unsupported_cemi_err)
-            return
-        self.cemi_received_callback(cemi)
+        self.cemi_received_callback(tunneling_request.raw_cemi)
 
     def _disconnect_request_received(
         self, disconnect_request: DisconnectRequest
@@ -377,6 +374,7 @@ class _Tunnel(Interface):
 class UDPTunnel(_Tunnel):
     """Class for handling KNX/IP UDP tunnels."""
 
+    connection_type = XknxConnectionType.TUNNEL_UDP
     transport: UDPTransport
 
     def __init__(
@@ -444,7 +442,6 @@ class UDPTunnel(_Tunnel):
         """
         raw_cemi = cemi.to_knx()
         async with self._send_lock:
-            cemi_logger.debug("Outgoing CEMI: %s", cemi)
             try:
                 try:
                     await self._tunnelling_request(raw_cemi)
@@ -549,6 +546,7 @@ class UDPTunnel(_Tunnel):
 class TCPTunnel(_Tunnel):
     """Class for handling KNX/IP TCP tunnels."""
 
+    connection_type = XknxConnectionType.TUNNEL_TCP
     transport: TCPTransport
 
     def __init__(
@@ -557,6 +555,7 @@ class TCPTunnel(_Tunnel):
         cemi_received_callback: CEMICallbackType,
         gateway_ip: str,
         gateway_port: int,
+        individual_address: IndividualAddress | None = None,
         auto_reconnect: bool = True,
         auto_reconnect_wait: int = 3,
     ):
@@ -571,6 +570,7 @@ class TCPTunnel(_Tunnel):
         )
         # TCP always uses 0.0.0.0:0
         self.local_hpai = HPAI(protocol=HostProtocol.IPV4_TCP)
+        self._requested_address = individual_address
 
     def _init_transport(self) -> None:
         """Initialize transport transport."""
@@ -590,6 +590,7 @@ class TCPTunnel(_Tunnel):
 class SecureTunnel(TCPTunnel):
     """Class for handling KNX/IP secure TCP tunnels."""
 
+    connection_type = XknxConnectionType.TUNNEL_SECURE
     transport: SecureSession
 
     def __init__(

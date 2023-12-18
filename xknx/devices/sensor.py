@@ -67,7 +67,7 @@ class Sensor(Device):
             )
         self.always_callback = always_callback
 
-    def _iter_remote_values(self) -> Iterator[RemoteValue[Any, Any]]:
+    def _iter_remote_values(self) -> Iterator[RemoteValue[Any]]:
         """Iterate the devices RemoteValue classes."""
         yield self.sensor_value
 
@@ -76,11 +76,11 @@ class Sensor(Device):
         """Return the last telegram received from the RemoteValue."""
         return self.sensor_value.telegram
 
-    async def process_group_write(self, telegram: "Telegram") -> None:
+    async def process_group_write(self, telegram: Telegram) -> None:
         """Process incoming and outgoing GROUP WRITE telegram."""
         await self.sensor_value.process(telegram, always_callback=self.always_callback)
 
-    async def process_group_response(self, telegram: "Telegram") -> None:
+    async def process_group_response(self, telegram: Telegram) -> None:
         """Process incoming GroupValueResponse telegrams."""
         await self.sensor_value.process(telegram)
 

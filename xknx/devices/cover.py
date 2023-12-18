@@ -143,7 +143,7 @@ class Cover(Device):
         self._periodic_update_task: Task | None = None
         self._travel_direction_tilt: TravelStatus | None = None
 
-    def _iter_remote_values(self) -> Iterator[RemoteValue[Any, Any]]:
+    def _iter_remote_values(self) -> Iterator[RemoteValue[Any]]:
         """Iterate the devices RemoteValue classes."""
         yield self.updown
         yield self.step
@@ -210,7 +210,7 @@ class Cover(Device):
         await self._stop_position_update()
 
     async def set_position(self, position: int) -> None:
-        """Move cover to a desginated postion."""
+        """Move cover to a desginated position."""
         if self.position_target.writable:
             await self.position_target.set(position)
             return
@@ -296,14 +296,14 @@ class Cover(Device):
         await self.after_update()
 
     async def _target_position_from_rv(self) -> None:
-        """Update the target postion from RemoteValue (Callback)."""
+        """Update the target position from RemoteValue (Callback)."""
         if self.position_target.value is not None:
             await self._start_position_update(
                 target_position=self.position_target.value
             )
 
     async def _current_position_from_rv(self) -> None:
-        """Update the current postion from RemoteValue (Callback)."""
+        """Update the current position from RemoteValue (Callback)."""
         position_before_update = self.travelcalculator.current_position()
         new_position = self.position_current.value
         if new_position is None:
@@ -336,7 +336,7 @@ class Cover(Device):
         await self.position_current.read_state(wait_for_result=wait_for_result)
         await self.angle.read_state(wait_for_result=wait_for_result)
 
-    async def process_group_write(self, telegram: "Telegram") -> None:
+    async def process_group_write(self, telegram: Telegram) -> None:
         """Process incoming and outgoing GROUP WRITE telegram."""
         # call after_update to account for travelcalculator changes
         if await self.updown.process(telegram):
@@ -360,7 +360,7 @@ class Cover(Device):
                 await self._stop_position_update()
 
         await self.position_current.process(telegram, always_callback=True)
-        await self.position_target.process(telegram)
+        await self.position_target.process(telegram, always_callback=True)
         await self.angle.process(telegram)
         await self.locked.process(telegram)
 

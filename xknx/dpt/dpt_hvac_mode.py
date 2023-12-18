@@ -7,10 +7,12 @@ from typing import Generic, TypeVar
 from xknx.exceptions import ConversionError
 
 from .dpt import DPTBase
+from .payload import DPTArray, DPTBinary
 
 HVACModeT = TypeVar("HVACModeT", "HVACControllerMode", "HVACOperationMode")
 
 
+# ruff: noqa: RUF012  # Mutable class attributes should be annotated with `typing.ClassVar`
 class HVACOperationMode(Enum):
     """Enum for the different KNX HVAC operation modes."""
 
@@ -45,23 +47,24 @@ class _DPTClimateMode(DPTBase, Generic[HVACModeT]):
 
     SUPPORTED_MODES: dict[int, HVACModeT] = {}
 
+    payload_type = DPTArray
     payload_length = 1
 
     @classmethod
-    def from_knx(cls, raw: tuple[int, ...]) -> HVACModeT:
+    def from_knx(cls, payload: DPTArray | DPTBinary) -> HVACModeT:
         """Parse/deserialize from KNX/IP raw data."""
-        cls.test_bytesarray(raw)
+        raw = cls.validate_payload(payload)
         try:
             return cls.SUPPORTED_MODES[raw[0]]
         except KeyError:
             raise ConversionError(f"Payload not supported for {cls.__name__}", raw=raw)
 
     @classmethod
-    def to_knx(cls, value: HVACModeT) -> tuple[int]:
+    def to_knx(cls, value: HVACModeT) -> DPTArray:
         """Serialize to KNX/IP raw data."""
         for knx_value, mode in cls.SUPPORTED_MODES.items():
             if mode == value:
-                return (knx_value,)
+                return DPTArray(knx_value)
         raise ConversionError(f"Value not supported for {cls.__name__}", value=value)
 
 
@@ -125,9 +128,9 @@ class DPTControllerStatus(_DPTClimateMode[HVACOperationMode]):
     }
 
     @classmethod
-    def from_knx(cls, raw: tuple[int, ...]) -> HVACOperationMode:
+    def from_knx(cls, payload: DPTArray | DPTBinary) -> HVACOperationMode:
         """Parse/deserialize from KNX/IP raw data."""
-        cls.test_bytesarray(raw)
+        raw = cls.validate_payload(payload)
         if raw[0] & 8 > 0:
             return HVACOperationMode.FROST_PROTECTION
         if raw[0] & 4 > 0:

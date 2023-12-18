@@ -26,7 +26,6 @@ from xknx.remote_value import (
     RemoteValueColorRGB,
     RemoteValueColorRGBW,
     RemoteValueColorXYY,
-    RemoteValueDpt2ByteUnsigned,
     RemoteValueNumeric,
     RemoteValueScaling,
     RemoteValueSwitch,
@@ -43,11 +42,11 @@ AsyncCallback = Callable[[], Awaitable[None]]
 logger = logging.getLogger("xknx.log")
 
 
-class ColorTempModes(Enum):
-    """Color temperature modes for config validation."""
+class ColorTemperatureType(Enum):
+    """DPT used for absolute color temperature."""
 
-    ABSOLUTE = "DPT-7.600"
-    RELATIVE = "DPT-5.001"
+    UINT_2_BYTE = "color_temperature"  # DPTColorTemperature 7.600
+    FLOAT_2_BYTE = "2byte_float"  # DPT2ByteFloat generic 9
 
 
 class _SwitchAndBrightness:
@@ -159,6 +158,7 @@ class Light(Device):
         group_address_switch_white_state: GroupAddressesType | None = None,
         group_address_brightness_white: GroupAddressesType | None = None,
         group_address_brightness_white_state: GroupAddressesType | None = None,
+        color_temperature_type: ColorTemperatureType = ColorTemperatureType.UINT_2_BYTE,
         sync_state: bool | int | float | str = True,
         min_kelvin: int | None = None,
         max_kelvin: int | None = None,
@@ -251,11 +251,12 @@ class Light(Device):
             range_to=255,
         )
 
-        self.color_temperature = RemoteValueDpt2ByteUnsigned(
+        self.color_temperature = RemoteValueNumeric(
             xknx,
             group_address_color_temperature,
             group_address_color_temperature_state,
             sync_state=sync_state,
+            value_type=color_temperature_type.value,
             device_name=self.name,
             feature_name="Color temperature",
             after_update_cb=self.after_update,
@@ -317,14 +318,14 @@ class Light(Device):
         self._individual_color_debounce_telegram_counter: int
         self._reset_individual_color_debounce_telegrams()
 
-    def _iter_remote_values(self) -> Iterator[RemoteValue[Any, Any]]:
+    def _iter_remote_values(self) -> Iterator[RemoteValue[Any]]:
         """Iterate the devices RemoteValue classes."""
         return chain(
             self._iter_instant_remote_values(),
             self._iter_debounce_remote_values(),
         )
 
-    def _iter_instant_remote_values(self) -> Iterator[RemoteValue[Any, Any]]:
+    def _iter_instant_remote_values(self) -> Iterator[RemoteValue[Any]]:
         """Iterate the devices RemoteValue classes calling after_update_cb immediately."""
         yield self.switch
         yield self.brightness
@@ -336,7 +337,7 @@ class Light(Device):
         yield self.tunable_white
         yield self.color_temperature
 
-    def _iter_debounce_remote_values(self) -> Iterator[RemoteValue[Any, Any]]:
+    def _iter_debounce_remote_values(self) -> Iterator[RemoteValue[Any]]:
         """Iterate the devices RemoteValue classes debouncing after_update_cb."""
         for color in self._iter_individual_colors():
             yield color.switch
@@ -515,7 +516,8 @@ class Light(Device):
 
     @property
     def current_hs_color(self) -> tuple[float, float] | None:
-        """Return current HS-color of the light.
+        """
+        Return current HS-color of the light.
 
         Hue is scaled 0-360 (265 possible values from KNX)
         Sat is scaled 0-100
@@ -582,7 +584,7 @@ class Light(Device):
         await self.tunable_white.set(tunable_white)
 
     @property
-    def current_color_temperature(self) -> int | None:
+    def current_color_temperature(self) -> int | float | None:
         """Return current absolute color temperature of light."""
         return self.color_temperature.value
 
@@ -596,7 +598,7 @@ class Light(Device):
             return
         await self.color_temperature.set(color_temperature)
 
-    async def process_group_write(self, telegram: "Telegram") -> None:
+    async def process_group_write(self, telegram: Telegram) -> None:
         """Process incoming and outgoing GROUP WRITE telegram."""
         for remote_value in self._iter_instant_remote_values():
             await remote_value.process(telegram)

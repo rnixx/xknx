@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from enum import Enum, auto
+import os
+from typing import Any
 
 from xknx.telegram.address import IndividualAddress, IndividualAddressableType
 
@@ -31,10 +33,12 @@ class ConnectionConfig:
         * TUNNELING connect to a specific KNX/IP tunneling device via UDP.
         * TUNNELING_TCP connect to a specific KNX/IP tunneling v2 device via TCP.
     * individual address:
+        * AUTOMATIC use a specific tunnel endpoint from a given knxkeys file
         * ROUTING the individual address used as source address for routing
+        * TCP TUNNELING request a specific tunnel endpoint
         * SECURE TUNNELING use a specific tunnel endpoint from the knxkeys file
-    * local_ip: Local ip of the interface though which KNXIPInterface should connect.
-    * gateway_ip: IP of KNX/IP tunneling device.
+    * local_ip: Local ip or interface name though which xknx should connect.
+    * gateway_ip: IP or hostname of KNX/IP tunneling device.
     * gateway_port: Port of KNX/IP tunneling device.
     * route_back: For UDP TUNNELING connection.
         The KNXnet/IP Server shall use the IP address and port in the received IP package
@@ -111,7 +115,7 @@ class SecureConfig:
         user_id: int | None = None,
         device_authentication_password: str | None = None,
         user_password: str | None = None,
-        knxkeys_file_path: str | None = None,
+        knxkeys_file_path: str | os.PathLike[Any] | None = None,
         knxkeys_password: str | None = None,
     ):
         """Initialize SecureConfig class."""

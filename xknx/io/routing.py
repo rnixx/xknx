@@ -13,8 +13,8 @@ import random
 from typing import TYPE_CHECKING, Final
 
 from xknx.cemi import CEMIFrame, CEMIMessageCode
-from xknx.core import XknxConnectionState
-from xknx.exceptions import CommunicationError, UnsupportedCEMIMessage
+from xknx.core import XknxConnectionState, XknxConnectionType
+from xknx.exceptions import CommunicationError
 from xknx.knxip import (
     HPAI,
     KNXIPFrame,
@@ -34,7 +34,6 @@ if TYPE_CHECKING:
     from xknx.xknx import XKNX
 
 logger = logging.getLogger("xknx.log")
-cemi_logger = logging.getLogger("xknx.cemi")
 
 BUSY_DECREMENT_TIME: Final = 0.005  # 5 ms
 BUSY_INCREMENT_COOLDOWN: Final = 0.01  # 10 ms
@@ -47,7 +46,7 @@ DEFAULT_LATENCY_TOLERANCE_MS: Final = 1000
 
 class _RoutingFlowControl:
     """
-    Class for hanling KNXnet/IP routing flow control.
+    Class for handling KNXnet/IP routing flow control.
 
     See KNX Specifications 3.8.5 Routing §2.3.5 Flow control handling
     """
@@ -133,6 +132,7 @@ class _RoutingFlowControl:
 class Routing(Interface):
     """Class for handling KNXnet/IP multicast communication."""
 
+    connection_type = XknxConnectionType.ROUTING
     transport: UDPTransport
 
     def __init__(
@@ -181,7 +181,7 @@ class Routing(Interface):
         """Start routing."""
         self.xknx.current_address = self.individual_address
         await self.xknx.connection_manager.connection_state_changed(
-            XknxConnectionState.CONNECTING
+            XknxConnectionState.CONNECTING, self.connection_type
         )
         try:
             await self.transport.connect()
@@ -198,7 +198,7 @@ class Routing(Interface):
             self.transport.stop()
             raise CommunicationError("Routing could not be started") from ex
         await self.xknx.connection_manager.connection_state_changed(
-            XknxConnectionState.CONNECTED
+            XknxConnectionState.CONNECTED, self.connection_type
         )
         return True
 
@@ -226,7 +226,7 @@ class Routing(Interface):
             self._send_knxipframe(KNXIPFrame.init_from_body(routing_indication))
 
         cemi.code = CEMIMessageCode.L_DATA_CON
-        self.cemi_received_callback(cemi)
+        self.cemi_received_callback(cemi.to_knx())
 
     def _send_knxipframe(self, knxipframe: KNXIPFrame) -> None:
         """Send KNXIPFrame to connected routing device."""
@@ -257,20 +257,13 @@ class Routing(Interface):
 
     def _handle_routing_indication(self, routing_indication: RoutingIndication) -> None:
         """Handle incoming RoutingIndication."""
-        try:
-            cemi = CEMIFrame.from_knx(routing_indication.raw_cemi)
-        except UnsupportedCEMIMessage as unsupported_cemi_err:
-            logger.warning("CEMI not supported: %s", unsupported_cemi_err)
-            return
-        if cemi.src_addr == self.individual_address:
-            logger.debug("Ignoring own packet %s", cemi)
-            return
-        self.cemi_received_callback(cemi)
+        self.cemi_received_callback(routing_indication.raw_cemi)
 
 
 class SecureRouting(Routing):
     """Class for handling KNXnet/IP secure multicast communication."""
 
+    connection_type = XknxConnectionType.ROUTING_SECURE
     transport: SecureGroup
 
     def __init__(
