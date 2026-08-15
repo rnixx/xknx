@@ -1,14 +1,14 @@
 ---
 repos:
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.3.0
+    rev: v2.4.3
     hooks:
       - id: codespell
         additional_dependencies:
           - tomli
         exclude_types: [csv, json]
   - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: 'v0.9.1'
+    rev: 'v0.16.3'
     hooks:
       - id: ruff
         # in CI it is directly run by tox to allow dependency upgrade checks
@@ -19,7 +19,7 @@ repos:
         # in CI it is directly run by tox to allow dependency upgrade checks
         stages: [pre-commit]
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: check-executables-have-shebangs
         stages: [manual]
@@ -29,7 +29,7 @@ repos:
           - --branch=main
       - id: trailing-whitespace
   - repo: https://github.com/cdce8p/python-typing-update
-    rev: v0.7.0
+    rev: v0.8.1
     hooks:
       # Run `pre-commit run --hook-stage manual python-typing-update --all-files` manually
       # from time to time to update python typing syntax.
